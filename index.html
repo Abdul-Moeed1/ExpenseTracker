@@ -96,6 +96,22 @@
         margin-top: 2px;
       }
 
+      /* Month / All time toggle */
+      .toggle {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-bottom: 16px;
+      }
+      .toggle button {
+        background: #e5e7eb;
+        color: #4b5563;
+      }
+      .toggle button.active {
+        background: #2563eb;
+        color: #fff;
+      }
+
       /* Pie chart */
       .pie-wrap {
         display: flex;
@@ -254,6 +270,10 @@
 
       <div class="panel">
         <h2>Spending by category</h2>
+        <div class="toggle">
+          <button type="button" id="modeMonth" class="active">Month</button>
+          <button type="button" id="modeAll">All time</button>
+        </div>
         <div class="pie-wrap">
           <div class="pie" id="pie"></div>
           <div class="legend" id="legend"></div>
@@ -261,7 +281,7 @@
       </div>
 
       <div class="panel">
-        <h2>Expenses</h2>
+        <h2>Expenses (selected month)</h2>
         <div id="list"></div>
       </div>
 
@@ -292,6 +312,7 @@
       };
 
       let expenses = JSON.parse(localStorage.getItem(KEY) || "[]");
+      let pieMode = "month"; // "month" or "all"
 
       const $ = (id) => document.getElementById(id);
       const save = () => localStorage.setItem(KEY, JSON.stringify(expenses));
@@ -345,6 +366,15 @@
         render();
       }
 
+      function setMode(mode) {
+        pieMode = mode;
+        $("modeMonth").classList.toggle("active", mode === "month");
+        $("modeAll").classList.toggle("active", mode === "all");
+        render();
+      }
+      $("modeMonth").addEventListener("click", () => setMode("month"));
+      $("modeAll").addEventListener("click", () => setMode("all"));
+
       function render() {
         const month = $("month").value;
         const inMonth = expenses.filter((x) => x.date.startsWith(month));
@@ -354,22 +384,26 @@
         $("monthTotal").textContent = fmt(monthTotal);
         $("allTotal").textContent = fmt(allTotal);
 
-        // Totals per category
+        // Pie data depends on the toggle
+        const pieData = pieMode === "month" ? inMonth : expenses;
+        const pieTotal = pieMode === "month" ? monthTotal : allTotal;
+
         const byType = {};
-        inMonth.forEach(
+        pieData.forEach(
           (x) => (byType[x.type] = (byType[x.type] || 0) + x.amount),
         );
         const entries = Object.entries(byType).sort((a, b) => b[1] - a[1]);
 
         // Pie chart via conic-gradient
-        if (entries.length === 0) {
+        if (entries.length === 0 || pieTotal <= 0) {
           $("pie").style.background = "#e5e7eb";
-          $("legend").innerHTML =
-            '<p class="empty">No expenses this month.</p>';
+          $("legend").innerHTML = `<p class="empty">${
+            pieMode === "month" ? "No expenses this month." : "No expenses yet."
+          }</p>`;
         } else {
           let start = 0;
           const stops = entries.map(([t, v]) => {
-            const end = start + (v / monthTotal) * 100;
+            const end = start + (v / pieTotal) * 100;
             const stop = `${COLORS[t] || "#999"} ${start}% ${end}%`;
             start = end;
             return stop;
@@ -382,14 +416,14 @@
         <div class="legend-row">
           <span class="dot" style="background:${COLORS[t] || "#999"}"></span>
           <span class="name">${esc(t)}</span>
-          <span class="pct">${Math.round((v / monthTotal) * 100)}%</span>
+          <span class="pct">${Math.round((v / pieTotal) * 100)}%</span>
           <span class="val">${fmt(v)}</span>
         </div>`,
             )
             .join("");
         }
 
-        // Expense list
+        // Expense list (always the selected month)
         $("list").innerHTML = inMonth.length
           ? [...inMonth]
               .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
